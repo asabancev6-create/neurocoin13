@@ -9,8 +9,8 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
-// In production, this URL must be the absolute URL to your manifest.json
-const MANIFEST_URL = 'https://chatgpt-helper.ru/tonconnect-manifest.json'; 
+// Points to the public file. Ensure your web server serves this correct at root.
+const MANIFEST_URL = window.location.origin + '/tonconnect-manifest.json'; 
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(

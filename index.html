@@ -1,15 +1,23 @@
 
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>NeuroCoin</title>
-    <!-- Official Telegram Web App script -->
+    
+    <!-- Telegram Web App Script -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Fonts: Inter (Main) and Orbitron (Numbers/Headers) -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Orbitron:wght@400;600;800;900&display=swap" rel="stylesheet">
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Orbitron:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    
     <script>
       tailwind.config = {
         theme: {
@@ -28,17 +36,14 @@
             },
             fontFamily: {
               sans: ['Inter', 'sans-serif'],
-              display: ['Orbitron', 'sans-serif'], // Keep Orbitron for numbers to look sci-fi
+              display: ['Orbitron', 'sans-serif'],
             },
             backgroundImage: {
               'gradient-primary': 'linear-gradient(135deg, #00F0FF 0%, #8D73FF 50%, #FF00E5 100%)',
               'gradient-gold': 'linear-gradient(135deg, #FFB800 0%, #FF8A00 100%)',
-              'gradient-card': 'linear-gradient(135deg, rgba(141, 115, 255, 0.1) 0%, rgba(255, 0, 229, 0.05) 100%)',
             },
             boxShadow: {
-              'glow': '0 0 40px rgba(141, 115, 255, 0.3)',
-              'glow-strong': '0 0 60px rgba(141, 115, 255, 0.5)',
-              'card': '0 8px 32px rgba(0, 0, 0, 0.4)',
+              'glow': '0 0 30px rgba(141, 115, 255, 0.2)',
             }
           }
         }
@@ -46,118 +51,54 @@
     </script>
     <style>
       :root {
-        --safe-bottom: env(safe-area-inset-bottom, 20px);
-        --color-bg: #000000;
-        --color-primary: #8D73FF;
-        --color-secondary: #00F0FF;
-        --color-accent: #FF00E5;
+        --tg-theme-bg-color: #000000;
+        --tg-theme-text-color: #ffffff;
       }
-
       body {
-        background-color: var(--color-bg);
-        color: #ffffff;
-        overflow: hidden;
-        touch-action: manipulation;
+        background-color: var(--tg-theme-bg-color, #000000);
+        color: var(--tg-theme-text-color, #ffffff);
+        overflow: hidden; /* Prevent body scroll */
+        touch-action: pan-x pan-y;
         -webkit-tap-highlight-color: transparent;
-      }
-
-      /* ===== SCROLLBAR ===== */
-      .no-scrollbar::-webkit-scrollbar { display: none; }
-      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-      /* ===== GLASS CARD ===== */
-      .glass-card {
-        background: rgba(255, 255, 255, 0.03);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border: 1px solid rgba(141, 115, 255, 0.2);
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        -webkit-user-select: none;
+        user-select: none;
       }
       
-      .glass-card-active {
-        background: rgba(141, 115, 255, 0.1);
-        border-color: rgba(141, 115, 255, 0.5);
-        box-shadow: 0 0 20px rgba(141, 115, 255, 0.2);
-      }
+      /* Disable pull-to-refresh on mobile */
+      overscroll-behavior-y: none;
 
-      /* ===== GRADIENT TEXT ===== */
-      .text-gradient {
-        background: linear-gradient(135deg, #00F0FF 0%, #8D73FF 50%, #FF00E5 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+      .glass-card {
+        background: rgba(20, 20, 25, 0.6);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
       }
-
-      /* ===== ANIMATED ORBS BACKGROUND ===== */
-      .orb-container {
-        position: fixed;
-        top: 0; left: 0; right: 0; bottom: 0;
-        z-index: -1;
-        overflow: hidden;
-        pointer-events: none;
-      }
-      .orb {
-        position: absolute;
-        border-radius: 50%;
-        filter: blur(80px);
-        opacity: 0.4;
-        animation: float 20s ease-in-out infinite;
-      }
-      .orb-1 {
-        width: 300px; height: 300px;
-        background: radial-gradient(circle, #8D73FF 0%, transparent 70%);
-        top: -50px; left: -50px;
-        animation-delay: 0s;
-      }
-      .orb-2 {
-        width: 250px; height: 250px;
-        background: radial-gradient(circle, #00F0FF 0%, transparent 70%);
-        top: 40%; right: -50px;
-        animation-delay: 7s;
-      }
-      .orb-3 {
-        width: 200px; height: 200px;
-        background: radial-gradient(circle, #FF00E5 0%, transparent 70%);
-        bottom: -50px; left: 50%;
-        transform: translateX(-50%);
-        animation-delay: 14s;
-      }
-
-      @keyframes float {
-        0%, 100% { transform: translate(0, 0) scale(1); }
-        33% { transform: translate(30px, -30px) scale(1.1); }
-        66% { transform: translate(-20px, 20px) scale(0.9); }
-      }
-
-      /* ===== NAVIGATION ===== */
-      .nav-glass {
-        background: rgba(0, 0, 0, 0.85);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border-top: 1px solid rgba(141, 115, 255, 0.2);
-      }
+      
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar { width: 0px; }
     </style>
-<script type="importmap">
+  <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "@tonconnect/ui-react": "https://esm.sh/@tonconnect/ui-react@^2.3.1",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.35.0",
-    "socket.io-client": "https://esm.sh/socket.io-client@^4.8.3",
+    "https": "https://esm.sh/https@^1.0.0",
     "vite": "https://esm.sh/vite@^7.3.1",
     "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
-    "express": "https://esm.sh/express@^5.2.1",
-    "http": "https://esm.sh/http@^0.0.1-security",
+    "socket.io-client": "https://esm.sh/socket.io-client@^4.8.3",
+    "@google/genai": "https://esm.sh/@google/genai@^1.36.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "cors": "https://esm.sh/cors@^2.8.5",
+    "dotenv/": "https://esm.sh/dotenv@^17.2.3/",
     "socket.io": "https://esm.sh/socket.io@^4.8.3",
-    "path": "https://esm.sh/path@^0.12.7",
     "url": "https://esm.sh/url@^0.11.4",
-    "fs": "https://esm.sh/fs@^0.0.1-security",
-    "mongoose": "https://esm.sh/mongoose@^9.1.2",
-    "redis": "https://esm.sh/redis@^5.10.0",
+    "@tonconnect/ui-react": "https://esm.sh/@tonconnect/ui-react@^2.3.1",
     "crypto": "https://esm.sh/crypto@^1.0.1",
-    "https": "https://esm.sh/https@^1.0.0"
+    "mongoose": "https://esm.sh/mongoose@^9.1.3",
+    "redis": "https://esm.sh/redis@^5.10.0",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "http": "https://esm.sh/http@^0.0.1-security",
+    "path": "https://esm.sh/path@^0.12.7",
+    "express": "https://esm.sh/express@^5.2.1"
   }
 }
 </script>

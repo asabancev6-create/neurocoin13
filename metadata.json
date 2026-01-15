@@ -1,0 +1,5 @@
+{
+  "name": "NeuroCoin Miner",
+  "description": "Интерфейс квантового майнинга нового поколения для сети NeuroCoin.",
+  "requestFramePermissions": []
+}

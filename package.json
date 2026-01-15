@@ -1,0 +1,37 @@
+
+{
+  "name": "neurocoin-miner",
+  "version": "2.2.0",
+  "description": "Quantum Mining Interface - DB Ready",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "pm2 start ecosystem.config.cjs --env production",
+    "stop": "pm2 stop neurocoin-backend",
+    "deploy": "bash deploy.sh"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "socket.io-client": "^4.7.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@google/genai": "^0.14.0",
+    "@tonconnect/ui-react": "^2.0.0",
+    "pm2": "^5.3.0",
+    "mongoose": "^8.4.1",
+    "redis": "^4.6.13"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.8"
+  }
+}

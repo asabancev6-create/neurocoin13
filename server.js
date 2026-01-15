@@ -1,5 +1,5 @@
 
-import 'dotenv/config'; // Load .env file
+import 'dotenv/config'; 
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -11,21 +11,20 @@ import cors from 'cors';
 import crypto from 'crypto';
 import https from 'https';
 
-// Import Models (Assumed to exist in ./models/)
+// Import Models
 import { User } from './models/user.js';
 import { NetworkState } from './models/network.js';
 
 // --- CONFIGURATION ---
 const PORT = process.env.PORT || 3000;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8505139227:AAEkVN5a7fGkApOUFQpJOx6lP0re_l8t078';
+const WEBAPP_URL = process.env.WEBAPP_URL || 'https://t.me/neurocoin_bot/app'; // Fallback to bot link if domain not set
 const DB_URL = process.env.DB_URL || 'mongodb://localhost:27017/neurocoin';
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
 // Game Constants
 const INITIAL_BLOCK_REWARD = 50;
-const DIFFICULTY_ADJUSTMENT_INTERVAL = 1300;
-const TARGET_BLOCK_TIME_MS = 6 * 60 * 1000;
 const REDIS_BLOCK_PROGRESS_KEY = 'network:currentBlockProgress';
 
 const STARS_PACKAGES = [
@@ -42,8 +41,15 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const httpServer = createServer(app);
 
-// CORS for Dev, tight for Prod
+// CORS & Security Headers
 app.use(cors());
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    next();
+});
+
+// Serve Static Files (Production Build)
 app.use(express.static(path.join(__dirname, 'dist')));
 
 const io = new Server(httpServer, { 
@@ -55,41 +61,8 @@ const io = new Server(httpServer, {
 
 const redisClient = createClient({ url: REDIS_URL });
 
-// --- STATE ---
-let networkState;
-let isProcessingBlock = false;
-const activeSockets = new Map(); // socketId -> userId
+// --- TELEGRAM API HELPERS ---
 
-// --- TELEGRAM UTILS ---
-
-// 1. Validate Init Data (CRITICAL FOR SECURITY)
-function validateTelegramData(initData) {
-    if (!initData) return null;
-    
-    const urlParams = new URLSearchParams(initData);
-    const hash = urlParams.get('hash');
-    if (!hash) return null;
-
-    urlParams.delete('hash');
-    
-    // Sort keys alphabetically
-    const params = Array.from(urlParams.entries());
-    params.sort((a, b) => a[0].localeCompare(b[0]));
-    
-    const dataCheckString = params.map(([key, value]) => `${key}=${value}`).join('\n');
-    
-    const secretKey = crypto.createHmac('sha256', 'WebAppData').update(TELEGRAM_BOT_TOKEN).digest();
-    const calculatedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
-    
-    if (calculatedHash === hash) {
-        const userStr = urlParams.get('user');
-        // Validate expiry (optional but recommended: e.g. auth_date)
-        return userStr ? JSON.parse(userStr) : null;
-    }
-    return null;
-}
-
-// 2. Call Telegram API (HTTPS)
 function callTelegramApi(method, body = {}) {
     return new Promise((resolve, reject) => {
         const data = JSON.stringify(body);
@@ -123,13 +96,65 @@ function callTelegramApi(method, body = {}) {
     });
 }
 
-// --- PAYMENTS LONG POLLING ---
+function validateTelegramData(initData) {
+    if (!initData) return null;
+    const urlParams = new URLSearchParams(initData);
+    const hash = urlParams.get('hash');
+    if (!hash) return null;
+    urlParams.delete('hash');
+    const params = Array.from(urlParams.entries());
+    params.sort((a, b) => a[0].localeCompare(b[0]));
+    const dataCheckString = params.map(([key, value]) => `${key}=${value}`).join('\n');
+    const secretKey = crypto.createHmac('sha256', 'WebAppData').update(TELEGRAM_BOT_TOKEN).digest();
+    const calculatedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+    if (calculatedHash === hash) {
+        const userStr = urlParams.get('user');
+        return userStr ? JSON.parse(userStr) : null;
+    }
+    return null;
+}
+
+// --- BOT LOGIC ---
+
+async function sendWelcomeMessage(chatId, firstName) {
+    const welcomeText = `
+👋 *Welcome to NeuroCoin, ${firstName}!*
+
+The era of Quantum Mining has begun.
+💎 Mine **NRC** tokens.
+⚡ Upgrade your neural rig.
+🌌 Compete in the global leaderboard.
+
+*System Status:* 🟢 ONLINE
+*Current Difficulty:* NORMAL
+
+👇 *Tap below to start mining:*
+    `;
+
+    await callTelegramApi('sendMessage', {
+        chat_id: chatId,
+        text: welcomeText,
+        parse_mode: 'Markdown',
+        reply_markup: {
+            inline_keyboard: [
+                [
+                    { text: "🚀 LAUNCH NEURO MINER", web_app: { url: WEBAPP_URL } }
+                ],
+                [
+                    { text: "👥 Join Community", url: "https://t.me/neurocoin_community" }
+                ]
+            ]
+        }
+    });
+}
+
+// --- LONG POLLING ---
 let lastUpdateId = 0;
 async function startTelegramPolling() {
     try {
         const response = await callTelegramApi('getUpdates', { 
             offset: lastUpdateId + 1, 
-            timeout: 30, // Long polling
+            timeout: 30, 
             allowed_updates: ['message', 'pre_checkout_query']
         });
 
@@ -137,6 +162,19 @@ async function startTelegramPolling() {
             for (const update of response.result) {
                 lastUpdateId = update.update_id;
 
+                // 1. Handle Messages (Commands)
+                if (update.message && update.message.text) {
+                    const text = update.message.text;
+                    const chatId = update.message.chat.id;
+                    
+                    if (text.startsWith('/start')) {
+                        // Check for referral logic here (e.g., /start ref123)
+                        // const refCode = text.split(' ')[1];
+                        await sendWelcomeMessage(chatId, update.message.from.first_name || 'Miner');
+                    }
+                }
+
+                // 2. Handle Payments
                 if (update.pre_checkout_query) {
                     await callTelegramApi('answerPreCheckoutQuery', {
                         pre_checkout_query_id: update.pre_checkout_query.id,
@@ -150,12 +188,12 @@ async function startTelegramPolling() {
             }
         }
     } catch (e) {
-        console.error('[POLLING ERROR]', e.message);
-        // Wait a bit before retrying to avoid spamming logs if network is down
+        if (e.code !== 'ECONNRESET') {
+             console.error('[POLLING ERROR]', e.message);
+        }
         await new Promise(r => setTimeout(r, 5000));
     }
-    
-    setImmediate(startTelegramPolling); // Loop
+    setImmediate(startTelegramPolling);
 }
 
 async function handlePaymentSuccess(message) {
@@ -167,11 +205,9 @@ async function handlePaymentSuccess(message) {
     
     const pack = STARS_PACKAGES.find(p => p.id === packId);
     if (pack) {
-        // Update DB
         await User.updateOne({ id: userId }, { $inc: { balanceTON: pack.amountTON } });
         await redisClient.hIncrByFloat(`user:${userId}`, 'balanceTON', pack.amountTON);
         
-        // Notify user if online
         for (const [socketId, sUserId] of activeSockets.entries()) {
             if (sUserId === userId) {
                 const userProfile = await getFullUserFromRedis(userId);
@@ -182,24 +218,23 @@ async function handlePaymentSuccess(message) {
     }
 }
 
-// --- GAME LOGIC ---
+// --- STATE MANAGEMENT ---
+let networkState;
+let isProcessingBlock = false;
+const activeSockets = new Map();
 
-// Load Network State
 async function initNetwork() {
     networkState = await NetworkState.findOne({ singleton: true });
     if (!networkState) {
         networkState = new NetworkState();
         await networkState.save();
     }
-    // Sync Redis
     await redisClient.set(REDIS_BLOCK_PROGRESS_KEY, networkState.currentBlockProgress.toString());
 }
 
-// Mine Block
 async function mineBlock(winnerSocketId = null) {
     if (isProcessingBlock) return;
     isProcessingBlock = true;
-    
     try {
         networkState.blockHeight++;
         networkState.totalMined += networkState.blockReward;
@@ -207,175 +242,128 @@ async function mineBlock(winnerSocketId = null) {
         networkState.lastBlockTime = Date.now();
         await redisClient.set(REDIS_BLOCK_PROGRESS_KEY, '0');
         
-        // Winner Reward
         if (winnerSocketId) {
             const winnerId = activeSockets.get(winnerSocketId);
             if (winnerId) {
                 const reward = networkState.blockReward;
                 await redisClient.hIncrByFloat(`user:${winnerId}`, 'balanceNRC', reward);
                 await redisClient.hIncrBy(`user:${winnerId}`, 'blocksMined', 1);
-                // Async DB persist
                 User.updateOne({ id: winnerId }, { $inc: { balanceNRC: reward, blocksMined: 1 } }).exec();
             }
         }
-        
         io.emit('block_found_global', { height: networkState.blockHeight });
         io.emit('network_tick', networkState);
-        
-        // Save Network State
         await networkState.save();
-        
-    } catch(e) {
-        console.error(e);
-    } finally {
-        isProcessingBlock = false;
-    }
+    } catch(e) { console.error(e); } 
+    finally { isProcessingBlock = false; }
 }
 
-// --- SOCKET HANDLERS ---
+// --- SOCKET IO ---
 io.on('connection', (socket) => {
-    
     socket.on('user_connect', async (payload) => {
         let userId;
         let username;
         let photoUrl;
 
-        // 1. Production Auth
         const validUser = validateTelegramData(payload.initData);
-        
         if (validUser) {
             userId = validUser.id.toString();
             username = validUser.username || `User_${userId}`;
             photoUrl = validUser.photo_url;
         } else if (IS_DEV && payload.user) {
-            // Dev Fallback
             userId = payload.user.id.toString();
             username = payload.user.username;
-            console.warn('[DEV] Allowing unverified user:', userId);
         } else {
-            socket.emit('auth_error', 'Invalid Telegram Signature');
+            socket.emit('auth_error', 'Signature Verification Failed');
             socket.disconnect();
             return;
         }
 
         activeSockets.set(socket.id, userId);
 
-        // Find or Create User
         let user = await User.findOne({ id: userId });
         if (!user) {
             user = new User({ id: userId, username, photoUrl });
             await user.save();
         }
-        
-        // Hydrate Redis
         await hydrateUserToRedis(user);
         
         const fullUser = await getFullUserFromRedis(userId);
-        socket.emit('init_state', { 
-            userProfile: fullUser, 
-            networkState,
-            isDev: IS_DEV 
-        });
+        socket.emit('init_state', { userProfile: fullUser, networkState, isDev: IS_DEV });
     });
 
     socket.on('request_stars_invoice', async ({ packId }) => {
         const userId = activeSockets.get(socket.id);
         if (!userId) return;
-        
         const pack = STARS_PACKAGES.find(p => p.id === packId);
         if (!pack) return;
-
         try {
             const result = await callTelegramApi('createInvoiceLink', {
                 title: pack.title,
                 description: pack.description,
                 payload: pack.id,
-                provider_token: "", // Empty for Stars
+                provider_token: "",
                 currency: "XTR",
                 prices: [{ label: "Stars", amount: pack.stars }]
             });
-            
-            if (result && result.ok) {
-                socket.emit('invoice_link', { url: result.result, packId });
-            } else {
-                socket.emit('notification', 'Invoice Error');
-            }
-        } catch (e) {
-            console.error(e);
-            socket.emit('notification', 'Server Error');
-        }
+            if (result && result.ok) socket.emit('invoice_link', { url: result.result, packId });
+        } catch (e) { console.error(e); }
     });
 
     socket.on('user_action', async (action) => {
         const userId = activeSockets.get(socket.id);
         if (!userId) return;
-
         if (action.type === 'TAP') {
-            const userKey = `user:${userId}`;
-            // Optimistic Check
-            const power = 25; // Base power + calculation from redis later
-            const currentProgress = await redisClient.incrByFloat(REDIS_BLOCK_PROGRESS_KEY, power);
-            
-            // Note: In a real high-load app, verify energy in Redis first using Lua script
-            // For now, straightforward incr is fine for <10k users
-            
-            if (!isProcessingBlock && currentProgress >= networkState.difficulty) {
-                await mineBlock(socket.id);
-            }
+            const currentProgress = await redisClient.incrByFloat(REDIS_BLOCK_PROGRESS_KEY, 25);
+            if (!isProcessingBlock && currentProgress >= networkState.difficulty) await mineBlock(socket.id);
         }
     });
 
-    socket.on('disconnect', () => {
-        activeSockets.delete(socket.id);
-    });
+    socket.on('disconnect', () => { activeSockets.delete(socket.id); });
 });
 
-// --- HELPERS ---
 async function hydrateUserToRedis(user) {
     const key = `user:${user.id}`;
-    // Flatten for Redis HSET
     await redisClient.hSet(key, {
         balanceNRC: user.balanceNRC.toString(),
         balanceTON: user.balanceTON.toString(),
         energy: user.energy.toString(),
-        // Add other necessary fields
     });
 }
 
 async function getFullUserFromRedis(userId) {
-    // Return hybrid of Mongo + Redis latest values
     const redisData = await redisClient.hGetAll(`user:${userId}`);
     const mongoData = await User.findOne({id: userId}).lean();
-    
     if (!mongoData) return null;
-
-    // Overlay Redis live data
     if (redisData.balanceNRC) mongoData.balanceNRC = parseFloat(redisData.balanceNRC);
     if (redisData.balanceTON) mongoData.balanceTON = parseFloat(redisData.balanceTON);
-    
     return mongoData;
 }
 
-// --- STARTUP ---
+// --- INIT ---
 async function main() {
     try {
         await mongoose.connect(DB_URL);
-        console.log('MongoDB Connected');
-        
+        console.log('✅ MongoDB Connected');
         await redisClient.connect();
-        console.log('Redis Connected');
-        
+        console.log('✅ Redis Connected');
         await initNetwork();
         
-        startTelegramPolling(); // Start Bot
+        // Start Bot Polling
+        startTelegramPolling();
+        console.log('🤖 Telegram Bot Started (Polling Mode)');
         
-        httpServer.listen(PORT, '0.0.0.0', () => {
-            console.log(`Server running on port ${PORT} (Prod: ${!IS_DEV})`);
+        // Handle SPA Routing (Always return index.html for unknown routes)
+        app.get('*', (req, res) => {
+            res.sendFile(path.join(__dirname, 'dist', 'index.html'));
         });
-        
-        // Loop for ticks
+
+        httpServer.listen(PORT, '0.0.0.0', () => {
+            console.log(`🚀 NEUROCOIN SERVER ONLINE port ${PORT}`);
+        });
+
+        // Network Tick Loop
         setInterval(async () => {
-            // Broadcast network state periodically
             const prog = await redisClient.get(REDIS_BLOCK_PROGRESS_KEY);
             networkState.currentBlockProgress = parseFloat(prog) || 0;
             networkState.onlineUsers = activeSockets.size;
